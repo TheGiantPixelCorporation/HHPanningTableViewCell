@@ -46,8 +46,8 @@
 
 @interface HHPanningTableViewCell () <UIGestureRecognizerDelegate>
 
-@property (nonatomic, assign, getter = isDrawerRevealed) BOOL		drawerRevealed;
-@property (nonatomic, assign, getter = isAnimationInProgress) BOOL	animationInProgress;
+@property (nonatomic, assign, getter = isDrawerRevealed)      BOOL  drawerRevealed;
+@property (nonatomic, assign, getter = isAnimationInProgress) BOOL  animationInProgress;
 
 @property (nonatomic, strong) UIView								*shadowView;
 @property (nonatomic, strong) UIPanGestureRecognizer				*panGestureRecognizer;
@@ -68,6 +68,7 @@
 
 
 static NSString *const												kDrawerRevealedContext	= @"drawerRevealed";
+static NSString *const												kSuperviewContext    	= @"superview";
 static NSString *const												kTranslationContext		= @"translation";
 
 
@@ -108,13 +109,12 @@ static NSString *const												kTranslationContext		= @"translation";
 
 	self.directionMask				= 0;
 	self.shouldBounce				= YES;
-
-	self.minimumPan					= HH_PANNING_MINIMUM_PAN;
-	self.maximumPan					= HH_PANNING_MAXIMUM_PAN;
+    self.shouldDisplayShadow        = YES;
 
 	[self addObserver:self forKeyPath:@"drawerRevealed" options:0 context:(__bridge void *)kDrawerRevealedContext];
-	[self addObserver:self forKeyPath:@"translation" options:0 context:(__bridge void *)kTranslationContext];
+	[self addObserver:self forKeyPath:@"translation"    options:0 context:(__bridge void *)kTranslationContext];
 }
+
 
 - (void)awakeFromNib
 {
@@ -131,6 +131,7 @@ static NSString *const												kTranslationContext		= @"translation";
 
 	self.directionMask			= 0;
 	self.shouldBounce			= YES;
+	self.shouldDisplayShadow	= YES;
 
 	[self.drawerView removeFromSuperview];
 	[self.shadowView removeFromSuperview];
@@ -173,7 +174,7 @@ static NSString *const												kTranslationContext		= @"translation";
 - (void)dealloc
 {
 	[self removeObserver:self forKeyPath:@"drawerRevealed" context:(__bridge void *)kDrawerRevealedContext];
-	[self removeObserver:self forKeyPath:@"translation" context:(__bridge void *)kTranslationContext];
+	[self removeObserver:self forKeyPath:@"translation"    context:(__bridge void *)kTranslationContext];
 }
 
 #pragma mark -
@@ -184,6 +185,7 @@ static NSString *const												kTranslationContext		= @"translation";
 	UIPanGestureRecognizer *drawerPanGestureRecognizer = self.drawerPanGestureRecognizer;
 
 	[_drawerView removeGestureRecognizer:drawerPanGestureRecognizer];
+    [_drawerView removeFromSuperview];
 	[drawerView addGestureRecognizer:drawerPanGestureRecognizer];
 
 	_drawerView = drawerView;
@@ -220,8 +222,8 @@ static NSString *const												kTranslationContext		= @"translation";
 		CGAffineTransform	shadowTransform		= CGAffineTransformMakeTranslation(shadowTranslation, 0.0f);
 
 		self.transform			= transform;
-		shadowView.transform	= shadowTransform;
-	}
+		shadowView.transform    = shadowTransform;
+    }
 	else {
 		[super observeValueForKeyPath:keyPath ofObject:object change:change context:context];
 	}
@@ -229,21 +231,24 @@ static NSString *const												kTranslationContext		= @"translation";
 
 - (void)setFrame:(CGRect)frame
 {
+    
 	BOOL drawerRevealed = self.drawerRevealed;
 
-	self.transform = CGAffineTransformIdentity;
-
+    self.transform = CGAffineTransformIdentity;
+    
 	[super setFrame:frame];
-
 	if (drawerRevealed) {
 		HHPanningTableViewCellDirection		panDirection		= (self.translation > 0.0) ? HHPanningTableViewCellDirectionRight : HHPanningTableViewCellDirectionLeft;
 
 		[self setDrawerRevealed:YES direction:panDirection animated:NO];
 	}
+
 }
 
 #pragma mark -
 #pragma mark API
+
+
 
 - (void)setSelected:(BOOL)selected animated:(BOOL)animated
 {
@@ -295,10 +300,10 @@ static NSString *const												kTranslationContext		= @"translation";
 		CGFloat translation = 0.0f;
 
 		if (direction == HHPanningTableViewCellDirectionRight) {
-			translation = bounds.size.width;
+			translation = self.maximumPanRight > 0.0 ?  self.maximumPanRight :  bounds.size.width;
 		}
 		else {
-			translation = -bounds.size.width;
+			translation = self.maximumPanLeft  > 0.0 ? -self.maximumPanLeft  : -bounds.size.width;
 		}
 
 		[self installViews];
@@ -459,11 +464,7 @@ static NSString *const												kTranslationContext		= @"translation";
 		[gestureRecognizer setTranslation:CGPointZero inView:self];
 
 		CGFloat		pan				= totalPan;
-		CGFloat		maximumPan		= self.maximumPan;
-
-		if (maximumPan <= 0.0f) {
-			maximumPan = self.bounds.size.width;
-		}
+		CGFloat		maximumPan		= self.bounds.size.width;
 
 		NSInteger	directionMask	= self.directionMask;
 
@@ -555,14 +556,15 @@ static NSString *const												kTranslationContext		= @"translation";
 
 - (void)placeViews
 {
-	UIView	*drawerView = self.drawerView;
+	UIView	*drawerView  = self.drawerView;
+    UIView  *contentView = self.contentView;
 
 	CGRect	bounds		= [self bounds];
 	CGPoint center		= [self center];
 
 	[drawerView setBounds:bounds];
 	[drawerView setCenter:center];
-
+    
 	UIView	*shadowView = self.shadowView;
 
 	CGRect	shadowBounds = CGRectInset(bounds, HH_PANNING_SHADOW_INSET, 0.0f);
@@ -578,7 +580,7 @@ static NSString *const												kTranslationContext		= @"translation";
 	UIView	*drawerView = self.drawerView;
 	UIView	*shadowView = self.shadowView;
 
-	if (shadowView == nil) {
+	if (shadowView == nil && self.shouldDisplayShadow) {
 		shadowView		= [self createShadowView];
 
 		self.shadowView = shadowView;
@@ -586,8 +588,12 @@ static NSString *const												kTranslationContext		= @"translation";
 
 	[self placeViews];
 
-	[superview insertSubview:shadowView belowSubview:self];
-	[superview insertSubview:drawerView belowSubview:shadowView];
+    if (self.shouldDisplayShadow) {
+        [superview addSubview:shadowView];
+        [superview sendSubviewToBack:shadowView];
+    }
+    [superview addSubview:drawerView];
+    [superview sendSubviewToBack:drawerView];
 }
 
 - (UITableView *)superTableView

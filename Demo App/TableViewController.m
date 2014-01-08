@@ -122,6 +122,8 @@
             cell.delegate = self;
         }
     }
+    cell.maximumPanLeft  = 100.0f;
+    cell.maximumPanRight = 100.0f;
 
 	cell.textLabel.text = [self.rowTitles objectAtIndex:directionMask];
 
